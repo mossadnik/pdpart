@@ -10,4 +10,4 @@
 # jupyter checkpoints
 */.ipynb_checkpoints
 
-/data/
+data/
