@@ -28,7 +28,7 @@ class Partitioned(object):
         filename = "%d.csv%s" % (part, suffix)
         return os.path.join(self.dirname, filename)
 
-    def __init__(self, dirname, by=None, n_partition=None, compression=None):
+    def __init__(self, dirname, by=None, n_partition=None, compression=None, reuse=False):
         """either in new dir or reuse existing dir
 
         TODO: separate new / load better
@@ -37,17 +37,16 @@ class Partitioned(object):
         self.compression = compression
         self.by = by
         self.dirname = dirname
-        params_given = all(p is not None for p in (by, n_partition))
         # check whether this has been created already
-        if os.path.exists(self._fn_meta()) and not params_given:
+        if os.path.exists(self._fn_meta()) and reuse:
             with open(self._fn_meta(), "r") as fp:
                 meta = json.load(fp)
             self.n_partition = meta["n_partition"]
             self.compression = meta["compression"]
             self._initialized = True
         else:
-            if not params_given:
-                raise ValueError("must specify by, n_partition when creating new Partitioned")
+            if n_partition is None:
+                raise ValueError("must specify n_partition when creating new Partitioned")
             self._initialized = False
 
     def init_dir(self):
@@ -60,6 +59,8 @@ class Partitioned(object):
         self._initialized = True
 
     def append(self, df):
+        if self.by is None:
+            raise ValueError("must set `by` in order to append")
         """write dataframe to partitions"""
         kw = dict(index=False, compression=self.compression)
         if not self._initialized:
@@ -68,7 +69,8 @@ class Partitioned(object):
         for filename in [f for f in self.partitions() if not os.path.exists(f)]:
             df.iloc[:0].to_csv(filename, header=True, **kw)
         # write actual data
-        for part, _df in df.groupby(get_partition(df[self.by], self.n_partition)):
+        groups = df.groupby(get_partition(df[self.by], self.n_partition))
+        for part, _df in groups:
             _df.to_csv(self._fn_part(part), mode="a", header=False, **kw)
 
     def partitions(self):
