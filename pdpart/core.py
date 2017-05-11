@@ -28,6 +28,13 @@ class Partitioned(object):
         filename = "%d.csv%s" % (part, suffix)
         return os.path.join(self.dirname, filename)
 
+    @staticmethod
+    def from_existing(dirname, partitioned):
+        return Partitioned(dirname,
+                           by=None,
+                           n_partition=partitioned.n_partition,
+                           compression=partitioned.compression)
+
     def __init__(self, dirname, by=None, n_partition=None, compression=None, reuse=False):
         """either in new dir or reuse existing dir
 
@@ -38,15 +45,18 @@ class Partitioned(object):
         self.by = by
         self.dirname = dirname
         # check whether this has been created already
-        if os.path.exists(self._fn_meta()) and reuse:
-            with open(self._fn_meta(), "r") as fp:
-                meta = json.load(fp)
-            self.n_partition = meta["n_partition"]
-            self.compression = meta["compression"]
+        if reuse:
+            try:
+                with open(self._fn_meta(), "r") as fp:
+                    meta = json.load(fp)
+                self.n_partition = meta["n_partition"]
+                self.compression = meta["compression"]
+            except:
+                raise ValueError("not a valid directory %s" % dirname)
             self._initialized = True
         else:
             if n_partition is None:
-                raise ValueError("must specify n_partition when creating new Partitioned")
+                raise ValueError("must specify n_partition if not reuse")
             self._initialized = False
 
     def init_dir(self):
@@ -57,6 +67,7 @@ class Partitioned(object):
         with open(self._fn_meta(), "w") as fp:
             json.dump({"n_partition": self.n_partition, "compression": self.compression}, fp)
         self._initialized = True
+        return self
 
     def append(self, df):
         if self.by is None:
