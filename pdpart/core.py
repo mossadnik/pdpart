@@ -62,7 +62,7 @@ class Partitioned(object):
     def init_dir(self):
         """empty directory dirname, populate meta.json"""
         if os.path.exists(self.dirname):
-                shutil.rmtree(self.dirname)
+            shutil.rmtree(self.dirname)
         os.makedirs(self.dirname)
         with open(self._fn_meta(), "w") as fp:
             json.dump({"n_partition": self.n_partition, "compression": self.compression}, fp)
