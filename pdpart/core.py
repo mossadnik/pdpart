@@ -3,20 +3,18 @@ import os
 import shutil
 from zlib import adler32
 import json
+from math import log10, ceil
 
 
-def get_partition(data, n_partition):
-    """get hash from series or frame
-
-    row -> [0..n_partition - 1]
-    """
+def get_partition(keys, n_partition):
+    """compute partition id from hash of keys"""
     def map_series(x):
         return adler32(str(x).encode('utf-8')) % n_partition
 
-    if isinstance(data, pd.Series):
-        return data.map(map_series).values
+    if isinstance(keys, pd.Series):
+        return keys.map(map_series).values
     else:
-        raise NotImplementedError("DataFrame to come")
+        raise NotImplementedError("multi-column keys to come")
 
 
 class Partitioned(object):
@@ -24,26 +22,41 @@ class Partitioned(object):
         return os.path.join(self.dirname, "meta.json")
 
     def _fn_part(self, part):
-        suffix = {None: "", "gzip": ".gz"}[self.compression]
-        filename = "%d.csv%s" % (part, suffix)
+        filename = self._filename_template % part
         return os.path.join(self.dirname, filename)
 
     @staticmethod
-    def from_existing(dirname, partitioned):
+    def new_like(dirname, partitioned):
+        """create new Partitioned using meta data from existng one."""
         return Partitioned(dirname,
                            by=None,
                            n_partition=partitioned.n_partition,
                            compression=partitioned.compression)
 
     def __init__(self, dirname, by=None, n_partition=None, compression=None, reuse=False):
-        """either in new dir or reuse existing dir
+        """Create new Partitioned instance
 
-        TODO: separate new / load better
+        Parameters
+        ----------
+        dirname : str
+            directory to put data, need not exist
+        by : str
+            column to use for partitioning
+        n_partition : int
+            number of partitions
+        compression : str
+            either "gzip" or None for no compression
+        reuse :
         """
-        self.n_partition = n_partition
-        self.compression = compression
+        self._n_partition = n_partition
+        self._compression = compression
         self.by = by
-        self.dirname = dirname
+        self._dirname = os.path.abspath(dirname)
+
+        suffix = {None: "", "gzip": ".gz"}[compression]
+        digits = str(ceil(log10(n_partition)))
+        self._filename_template = os.path.join(self.dirname, "%0" + digits + "d.csv" + suffix)
+
         # check whether this has been created already
         if reuse:
             try:
@@ -51,39 +64,64 @@ class Partitioned(object):
                     meta = json.load(fp)
                 self.n_partition = meta["n_partition"]
                 self.compression = meta["compression"]
+                self.by = meta["by"]
             except:
                 raise ValueError("not a valid directory %s" % dirname)
             self._initialized = True
         else:
             if n_partition is None:
-                raise ValueError("must specify n_partition if not reuse")
+                raise ValueError("must specify n_partition if reuse is False")
             self._initialized = False
 
     def init_dir(self):
-        """empty directory dirname, populate meta.json"""
-        if os.path.exists(self.dirname):
-            shutil.rmtree(self.dirname)
-        os.makedirs(self.dirname)
+        """intialize directory
+
+        If the directory exists its content is removed.
+        """
+        dirname = self.dirname
+        if os.path.exists(dirname):
+            shutil.rmtree(dirname)
+        os.makedirs(dirname)
         with open(self._fn_meta(), "w") as fp:
-            json.dump({"n_partition": self.n_partition, "compression": self.compression}, fp)
+            json.dump({"n_partition": self.n_partition, "compression": self.compression, "by": self.by}, fp)
         self._initialized = True
         return self
 
     def append(self, df):
+        """write dataframe to partitions"""
         if self.by is None:
             raise ValueError("must set `by` in order to append")
-        """write dataframe to partitions"""
-        kw = dict(index=False, compression=self.compression)
         if not self._initialized:
-            raise Exception("need to initialize directory first")
+            raise IOError("need to initialize directory first")
+
+        kw = dict(index=False, compression=self.compression)
         # write header for parts that don't exist
-        for filename in [f for f in self.partitions() if not os.path.exists(f)]:
+        for filename in [f for f in self.partitions if not os.path.exists(f)]:
             df.iloc[:0].to_csv(filename, header=True, **kw)
         # write actual data
         groups = df.groupby(get_partition(df[self.by], self.n_partition))
         for part, _df in groups:
             _df.to_csv(self._fn_part(part), mode="a", header=False, **kw)
 
+    @property
     def partitions(self):
         """iterable of filenames"""
         return (self._fn_part(part) for part in range(self.n_partition))
+
+    @property
+    def compression(self):
+        return self._compression
+
+    @property
+    def n_partition(self):
+        return self._n_partition
+
+    @property
+    def dirname(self):
+        return self._dirname
+
+    def __repr__(self):
+        return "<Partitioned(dirname='%s')" % self.dirname
+
+    def __str__(self):
+        return self.__repr__()
