@@ -17,23 +17,26 @@ def get_partition(keys, n_partition):
         raise NotImplementedError("multi-column keys to come")
 
 
-class Partitioned(object):
-    def _fn_meta(self):
-        return os.path.join(self.dirname, "meta.json")
 
-    def _fn_part(self, part):
-        filename = self._filename_template % part
-        return os.path.join(self.dirname, filename)
+class Partitioned(object):
+    @staticmethod
+    def open(dirname):
+        """open existing partitions directory"""
+        try:
+            with open(os.path.join(dirname, 'meta.json'), 'r') as fp:
+                meta = json.load(fp)
+                parts = Partitioned(dirname, **meta)
+                parts._initialized = True
+                return parts
+        except:
+            raise IOError('not a valid directory: %s' % dirname)
 
     @staticmethod
-    def new_like(dirname, partitioned):
-        """create new Partitioned using meta data from existng one."""
-        return Partitioned(dirname,
-                           by=None,
-                           n_partition=partitioned.n_partition,
-                           compression=partitioned.compression)
+    def create(dirname, by, n_partition, compression=None):
+        """create new Partitioned instance and initialize directory"""
+        return Partitioned(dirname, by, n_partition, compression).init_dir()
 
-    def __init__(self, dirname, by=None, n_partition=None, compression=None, reuse=False):
+    def __init__(self, dirname, by, n_partition, compression=None):
         """Create new Partitioned instance
 
         Parameters
@@ -48,30 +51,30 @@ class Partitioned(object):
             either "gzip" or None for no compression
         reuse :
         """
-        self._n_partition = n_partition
-        self._compression = compression
+        self.n_partition = n_partition
+        self.compression = compression
         self.by = by
-        self._dirname = os.path.abspath(dirname)
+        self.dirname = os.path.abspath(dirname)
 
         suffix = {None: "", "gzip": ".gz"}[compression]
         digits = str(ceil(log10(n_partition)))
         self._filename_template = os.path.join(self.dirname, "%0" + digits + "d.csv" + suffix)
+        self._initialized = False
 
-        # check whether this has been created already
-        if reuse:
-            try:
-                with open(self._fn_meta(), "r") as fp:
-                    meta = json.load(fp)
-                self.n_partition = meta["n_partition"]
-                self.compression = meta["compression"]
-                self.by = meta["by"]
-            except:
-                raise ValueError("not a valid directory %s" % dirname)
-            self._initialized = True
-        else:
-            if n_partition is None:
-                raise ValueError("must specify n_partition if reuse is False")
-            self._initialized = False
+
+    @property
+    def fn_meta(self):
+        return os.path.join(self.dirname, "meta.json")
+
+    def _fn_part(self, part):
+        filename = self._filename_template % part
+        return os.path.join(self.dirname, filename)
+
+    @property
+    def meta(self):
+        """return meta data for creating similar Partitioned object"""
+        return dict(n_partition=self.n_partition, by=self.by, compression=self.compression)
+
 
     def init_dir(self):
         """intialize directory
@@ -82,15 +85,13 @@ class Partitioned(object):
         if os.path.exists(dirname):
             shutil.rmtree(dirname)
         os.makedirs(dirname)
-        with open(self._fn_meta(), "w") as fp:
-            json.dump({"n_partition": self.n_partition, "compression": self.compression, "by": self.by}, fp)
+        with open(self.fn_meta, "w") as fp:
+            json.dump(self.meta, fp)
         self._initialized = True
         return self
 
     def append(self, df):
         """write dataframe to partitions"""
-        if self.by is None:
-            raise ValueError("must set `by` in order to append")
         if not self._initialized:
             raise IOError("need to initialize directory first")
 
@@ -108,20 +109,8 @@ class Partitioned(object):
         """iterable of filenames"""
         return (self._fn_part(part) for part in range(self.n_partition))
 
-    @property
-    def compression(self):
-        return self._compression
-
-    @property
-    def n_partition(self):
-        return self._n_partition
-
-    @property
-    def dirname(self):
-        return self._dirname
-
     def __repr__(self):
-        return "<Partitioned(dirname='%s')" % self.dirname
+        return "<Partitioned(by={by}, n_partition={n_partition}, compression={compression})".format(**self.meta)
 
     def __str__(self):
         return self.__repr__()
