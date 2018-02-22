@@ -10,7 +10,7 @@ setup(
     author_email='ossadnik.matthias@gmail.com',
     license='MIT',
     setup_requires=['pytest-runner'],
-    install_requires=['numpy', 'scipy'],
+    install_requires=['pandas'],
     tests_require=['pytest'],
     packages=['pdpart'],
     zip_safe=False,
