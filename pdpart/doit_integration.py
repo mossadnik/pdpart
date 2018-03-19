@@ -79,7 +79,7 @@ def partition_task(fn_in, path_out, by, n_partition=200, chunksize=int(1e6), rea
     }
 
 
-def transformation_task(path_in, path_out, func, read_csv_kwargs={}, func_args=[], func_kwargs={}):
+def transformation_task(parts_in, path_out, func, read_csv_kwargs={}, func_args=[], func_kwargs={}):
     """Create doit tasks for transforming one or more partioned files into a new one.
 
     wraps a function func that transform input DataFrames into an output DataFrame to
@@ -87,8 +87,8 @@ def transformation_task(path_in, path_out, func, read_csv_kwargs={}, func_args=[
 
     Parameters
     ----------
-    path_in : str, pathlib.Path or list
-        path or list of paths to input Partitioned directories
+    parts_in : Partitioned or list
+        inputs
     path_out : str or pathlib.Path
         path to output Partitioned. Will be created during task
         execution.
@@ -114,9 +114,8 @@ def transformation_task(path_in, path_out, func, read_csv_kwargs={}, func_args=[
         res = func(*df_in, *func_args, **func_kwargs)
         res.to_csv(fn_out, index=False)
 
-    if isinstance(path_in, (str, Path)):
-        path_in = [path_in]
-    parts_in = [Partitioned.open(p) for p in path_in]
+    if isinstance(parts_in, Partitioned):
+        parts_in = [parts_in]
     parts_out = Partitioned(path_out, **parts_in[0].meta)
     filenames = (
         (f[:-1], f[-1]) for f in zip(*[p.partitions for p in parts_in], parts_out.partitions)
