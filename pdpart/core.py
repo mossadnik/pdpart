@@ -32,12 +32,20 @@ class Partitioned(object):
             raise IOError('not a valid directory: %s' % dirname)
 
     @staticmethod
-    def create(dirname, by, n_partition, compression=None):
-        """create new Partitioned instance and initialize directory"""
-        return Partitioned(dirname, by, n_partition, compression).init_dir()
+    def create(dirname, by, n_partition):
+        """create new Partitioned instance and initialize directory.
 
-    def __init__(self, dirname, by, n_partition, compression=None):
-        """Create new Partitioned instance
+        Equivalent to
+
+        Partitioned(dirname, by, n_partition).init_dir()
+        """
+        return Partitioned(dirname, by, n_partition).init_dir()
+
+    def __init__(self, dirname, by, n_partition):
+        """Create new Partitioned instance.
+
+        Usually there is no need for this, just use the static methods
+        create or open instead.
 
         Parameters
         ----------
@@ -47,18 +55,13 @@ class Partitioned(object):
             column to use for partitioning
         n_partition : int
             number of partitions
-        compression : str
-            either "gzip" or None for no compression
-        reuse :
         """
         self.n_partition = n_partition
-        self.compression = compression
         self.by = by
         self.dirname = os.path.abspath(dirname)
 
-        suffix = {None: "", "gzip": ".gz"}[compression]
         digits = str(ceil(log10(n_partition)))
-        self._filename_template = os.path.join(self.dirname, "%0" + digits + "d.csv" + suffix)
+        self._filename_template = os.path.join(self.dirname, "%0" + digits + "d.csv")
         self._initialized = False
 
 
@@ -73,7 +76,7 @@ class Partitioned(object):
     @property
     def meta(self):
         """return meta data for creating similar Partitioned object"""
-        return dict(n_partition=self.n_partition, by=self.by, compression=self.compression)
+        return dict(n_partition=self.n_partition, by=self.by)
 
 
     def init_dir(self):
@@ -95,7 +98,7 @@ class Partitioned(object):
         if not self._initialized:
             raise IOError("need to initialize directory first")
 
-        kw = dict(index=False, compression=self.compression)
+        kw = dict(index=False)
         # write header for parts that don't exist
         for filename in [f for f in self.partitions if not os.path.exists(f)]:
             df.iloc[:0].to_csv(filename, header=True, **kw)
@@ -110,7 +113,4 @@ class Partitioned(object):
         return (self._fn_part(part) for part in range(self.n_partition))
 
     def __repr__(self):
-        return "<Partitioned(by={by}, n_partition={n_partition}, compression={compression})".format(**self.meta)
-
-    def __str__(self):
-        return self.__repr__()
+        return "<Partitioned(by={by}, n_partition={n_partition})>".format(**self.meta)

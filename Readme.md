@@ -33,3 +33,15 @@ for fn in parts.partitions:
     df = pd.read_csv(fn)
     # do something here ...
 ```
+
+## Change Log
+
+### 0.2.0
+
+ * add [doit](http://pydoit.org) integration
+ * remove support for compressing partitioned files
+
+### 0.1.0
+
+ * refactor interface
+
