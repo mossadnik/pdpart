@@ -1,6 +1,7 @@
 """helpers for integration with the doit library"""
 
 from pathlib import Path
+import pandas as pd
 from .core import Partitioned
 
 
