@@ -12,7 +12,7 @@ Despite (or because?) of its narrow scope, I find that pdpart fits well into my 
 
 ## Basic usage
 
-```
+```python
 import pandas as pd
 from pdpart import Partitioned
 
