@@ -23,7 +23,7 @@ data = pd.DataFrame({
 })
 
 # create new directory in which partitions are put
-parts = partitioned.create('/data/parts/', by='key', n_partition=3)
+parts = Partitioned.create('/data/parts/', by='key', n_partition=3)
 
 # add data to the partitions, each key is mapped to a partition deterministically
 parts.append(data)
